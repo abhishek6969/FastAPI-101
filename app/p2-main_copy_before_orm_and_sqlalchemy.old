@@ -1,0 +1,242 @@
+# ============ IMPORTS ============
+# FastAPI: Main web framework for building REST APIs with automatic validation, documentation, and async support
+# Body: Explicit request body parameter marker (rarely needed since BaseModel implies it)
+# Response: Object to customize HTTP responses (status codes, headers, cookies). Used for manual control when needed
+# status: HTTP status code constants (200, 201, 404, 422, etc.) - more readable than raw numbers
+# HTTPException: FastAPI's exception class that automatically converts to proper HTTP error responses with status codes
+# BaseModel: Pydantic class for data validation schemas. FastAPI uses this to parse/validate request data
+# Optional: Type hint meaning a value can be None or the specified type. FastAPI makes these parameters optional in APIs
+from fastapi import Body, FastAPI , Response, status , HTTPException
+from pydantic import BaseModel
+from typing import Optional
+from random import randrange
+import psycopg2
+from  psycopg2.extras import RealDictCursor
+import time
+
+# ============ APP INITIALIZATION ============
+# Create FastAPI app instance - this is your entire API application
+# All endpoints (@app.get, @app.post, @app.delete, etc.) are registered with this instance
+# FastAPI automatically generates OpenAPI docs, JSON Schema, and handles routing to the right handler function
+app = FastAPI()
+
+# ============ DATA MODELS ============
+# Define a Post model using Pydantic - acts as a schema/contract for API requests and responses
+# When a request is received with JSON body, FastAPI automatically:
+# 1. Parses raw JSON string from HTTP request body
+# 2. Validates each field against this schema (type checking, required vs optional)
+# 3. Converts validated JSON into a Post object instance
+# 4. If validation fails, returns 422 Unprocessable Entity with error details (automatic!)
+# 
+# This model also serves as AUTO-DOCUMENTATION - FastAPI shows this in interactive docs at /docs
+class Post(BaseModel):
+  title: str                          # Required field - MUST be provided in JSON, must be a string type
+  content: str                        # Required field - MUST be provided in JSON, must be a string type
+  published: bool = True              # Optional field with default - if not provided, defaults to True
+  
+  # rating: Optional[int] = None        # Optional field that can be None or an integer - safe to omit from request
+while True :
+  try:
+    conn = psycopg2.connect(host='localhost', database='fastapi', user='postgres', password='postgreSunkale@1403' , cursor_factory=RealDictCursor)
+    cursor = conn.cursor()
+    print("Database connection successful!")
+    break
+  except Exception as error:
+    print("Database connection failed:", error)
+    time.sleep(10) # Wait for 10 seconds before retrying
+
+  
+  
+my_posts = [{"title": "First Post", "content": "This is the content of the first post", "published": True, "rating": 5, "id": 1},{"title": "Fav Foods", "content": "This is the content of the fav foods", "published": False, "rating": 3, "id": 2}] # Legacy in-memory data store (deprecated - all data operations now use PostgreSQL database via cursor)
+
+def find_post(id):
+  # ========== SQL QUERY - SELECT BY PRIMARY KEY ==========
+  # Query: SELECT * FROM posts WHERE id = %s
+  # PURPOSE: Fetch a single post by its primary key ID from the database
+  # PARAMETERIZED QUERY: Uses %s placeholder with (str(id),) tuple to prevent SQL injection
+  # WHY TUPLE: psycopg2 requires parameters as tuple. The trailing comma (str(id),) makes it a 1-element tuple
+  # EXECUTION: Database finds exact match on id (indexed column) for O(1) lookup performance
+  cursor.execute("SELECT * FROM posts WHERE id = %s", (str(id),))
+  
+  # ========== FETCH RESULT ==========
+  # cursor.fetchone(): Retrieves ONE row from result set and returns as dict (because cursor_factory=RealDictCursor)
+  # Returns: dict with columns as keys (id, title, content, published) OR None if no match found
+  # Note: Result sits in cursor buffer after execute() - fetchone() retrieves from memory, not making new query
+  post = cursor.fetchone()
+  return post # Returns the post dict if found, or None if not found
+
+# def find_index_post(id):
+#   for index, post in enumerate(my_posts):
+#     if post["id"] == id:
+#       return index
+#   return None
+
+# ============ ROUTES - GET REQUESTS ============
+# @app.get("/") - decorator that registers a GET endpoint at root URL (/)
+# This function is called when a GET request hits the root path
+@app.get("/")
+def root():
+  return {"message": "My name is Abhishek!"}
+
+# @app.get("/posts") - GET endpoint that returns all posts from database
+# ========== SQL QUERY - SELECT ALL ==========
+# Query: SELECT * FROM posts
+# PURPOSE: Retrieve all posts from the database (no WHERE clause = no filtering)
+# PERFORMANCE: Fetches entire table - OK for small dataset, should add pagination for large tables
+# CURSOR STATE: After execute(), all rows are buffered and ready to fetch
+@app.get("/posts")
+def get_posts():
+  cursor.execute("SELECT * FROM posts")  # SELECT all columns from posts table
+  posts = cursor.fetchall()  # Fetch ALL matching rows as list of dicts, returns [] if table empty
+  return {"data": posts}  # Return list of post dicts serialized to JSON
+
+@app.get("/posts/{id}") # Dynamic route placeholder {id} is extracted from URL
+def get_post(id: int): # 'id' is expected to be an integer (validated by FastAPI)
+  # The fastapi framework automatically validates and converts the 'id' path parameter to an integer before it reaches this function because we specified 'id: int' in the function signature. This means: fastapi will check if the value in the URL can be converted to an integer. If it can, it will pass the integer
+  
+  # ========== PYDANTIC VALIDATION FOR PATH PARAMETER ==========
+  # When URL is accessed: GET /posts/5 or GET /posts/123
+  #
+  # STEP 1: FastAPI extracts the path parameter from URL:
+  #   URL: "http://127.0.0.1:8000/posts/5"
+  #   Extracted value: "5" (comes as STRING from URL)
+  #
+  # STEP 2: Pydantic validates and converts STRING → INTEGER:
+  #   - Checks if "5" can be converted to an integer ✓
+  #   - If it CAN be converted: passes 5 (int) to function
+  #   - If it CANNOT (e.g., "abc"): returns 422 error immediately
+  #
+  # RESULT: The 'id' parameter is a validated integer, NOT a string!
+  # Example: /posts/5 → id = 5 (int type)
+  # Example: /posts/abc → Error 422 (validation failed)
+  
+  my_post = find_post(id) # Query database for post with this ID using parameterized SELECT query
+  if not my_post: # If no post found with the given ID
+      # HTTPException is FastAPI's way to gracefully return HTTP error responses
+      # When raised, FastAPI automatically:
+      # 1. Converts this to proper HTTP response with specified status code
+      # 2. Sends the detail message as JSON response body
+      # 3. Sets appropriate Content-Type and status headers
+      # This is better than manually setting response.status_code because:
+      # - More Pythonic (exception-based control flow)
+      # - Automatic error formatting and headers
+      # - Stops function execution immediately
+      raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Post with id: {id} was not found")
+  return {"post_data" : my_post}
+
+# ============ ROUTES - POST REQUESTS ============
+# @app.post("/posts") registers a POST HTTP method handler for the /posts path
+# POST method = used for CREATING new resources (RESTful convention)
+# @app.post decorator tells FastAPI:
+#   1. Listen for POST requests to /posts
+#   2. Extract request body, validate it using Post model schema
+#   3. Pass validated Post object to this function
+#   4. Auto-serialize the returned dict to JSON response
+#
+# status_code parameter in DECORATOR is declarative (FastAPI's best practice)
+# This tells FastAPI to ALWAYS return 201 Created status for successful requests
+# (Better than manually setting in function because it's visible in docs and handled before function runs)
+@app.post("/posts", status_code=status.HTTP_201_CREATED)  # 201 Created = standard HTTP status for successful resource creation
+def create_post(post: Post): # 'post: Post' triggers automatic Pydantic validation of request body
+  # ========== REQUEST BODY FLOW ==========
+  # Client sends: POST /posts with JSON body
+  # FastAPI receives: raw JSON string from HTTP request
+  # Pydantic validates: parses JSON string → Python dict → validates against Post schema
+  # Function receives: validated Post object (strongly typed, all fields confirmed valid)
+  # Function returns: Python dict → FastAPI serializes to JSON → sends HTTP response
+  post_dict = post.model_dump() # Convert Pydantic model instance to dict (for easier manipulation)
+  
+  # ========== SQL INSERT WITH RETURNING CLAUSE ==========
+  # Query: INSERT INTO posts (title, content, published) VALUES (%s, %s, %s) RETURNING *
+  # PARAMETERIZED: Uses %s placeholders with tuple (title, content, published) to prevent SQL injection
+  # VALUES: %s placeholders filled with (title, content, published) from request body
+  # RETURNING *: PostgreSQL special clause that returns the inserted row INCLUDING auto-generated id
+  # AUTO-INCREMENT: PostgreSQL sequence automatically generates unique id (NOT manually provided)
+  # SEQUENCE BEHAVIOR: Even if this INSERT fails/rolls back, the sequence id counter still advances
+  cursor.execute("INSERT INTO posts (title, content, published) VALUES (%s, %s, %s) RETURNING *", (post_dict["title"], post_dict["content"], post_dict["published"]))
+  
+  # ========== TRANSACTION COMMIT ==========
+  # conn.commit(): Persists all changes from current transaction to database permanently
+  # NO COMMIT = No rollback: Changes remain in cursor buffer but aren't saved to disk
+  # MUST COMMIT BEFORE: Fetching results to ensure changes are recorded
+  # ORDER: execute() → commit() → fetchone() (best practice for safety)
+  conn.commit() # Commit the transaction to save changes to the database  
+  
+  # ========== FETCH NEWLY CREATED POST ==========
+  # cursor.fetchone(): Retrieves the row returned by RETURNING * clause
+  # Result includes: {id: <auto-generated>, title, content, published} as dict
+  # NOTE: id field was auto-generated by PostgreSQL sequence during INSERT
+  new_post = cursor.fetchone() # Fetch the newly created post with its auto-generated ID from RETURNING clause
+  
+  return {"data": new_post} # Return the created post data in response body (FastAPI will convert this dict to JSON automatically)
+
+#Visit http://127.0.0.1:8000/docs to view the interactive API documentation 
+#always use plural for posts / users as its  abest practice to follow RESTful conventions.
+
+# ============ ROUTES - DELETE REQUESTS ============
+# @app.delete registers a DELETE HTTP method handler
+# DELETE method = used for REMOVING/DELETING resources (RESTful convention)
+# status_code=204 indicates successful deletion with NO content in response body
+# (Different from 200 OK which usually has a response body)
+@app.delete("/posts/{id}", status_code=status.HTTP_204_NO_CONTENT)  # 204 No Content = standard for successful DELETE
+def delete_post(id: int):  # Path parameter 'id' is validated and converted to int by Pydantic (like in GET)
+  # ========== CHECK IF POST EXISTS ==========
+  # Query database first to verify post exists before attempting DELETE
+  # find_post(id) returns dict if found, None if not found
+  post_exists = find_post(id)
+  
+  if post_exists is None:  # If post doesn't exist, raise 404 error immediately
+    # FastAPI converts this exception to 404 HTTP response automatically
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Post with id: {id} was not found")
+  
+  # ========== SQL DELETE WITH WHERE CLAUSE ==========
+  # Query: DELETE FROM posts WHERE id = %s
+  # PARAMETERIZED: Uses %s placeholder with (str(id),) tuple to prevent SQL injection
+  # WHERE CLAUSE: Ensures only the specific post is deleted (id is primary key = guaranteed unique match)
+  # RESULT: Exactly 1 row deleted (or 0 if somehow post disappeared between check and delete)
+  cursor.execute("DELETE FROM posts WHERE id = %s", (str(id),))
+  
+  # ========== TRANSACTION COMMIT ==========
+  # conn.commit(): Makes the DELETE permanent in database
+  # WITHOUT COMMIT: Deletion sits in transaction buffer but isn't saved
+  conn.commit() # Commit the transaction to permanently delete the post
+  
+  return Response(status_code=status.HTTP_204_NO_CONTENT)  # Return 204 (no response body) indicating successful deletion
+
+
+@app.put("/posts/{id}",status_code=status.HTTP_200_OK) # PUT method = used for UPDATING existing resources (RESTful convention)
+def update_post(id: int, post: Post): # 'id' from path, 'post' from request body (validated by Pydantic)
+  # ========== CHECK IF POST EXISTS ==========
+  # Query database to verify post exists before attempting UPDATE
+  post_exists = find_post(id)
+  
+  if post_exists is None:  # If post doesn't exist, raise 404 error immediately
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Post with id: {id} was not found")
+  
+  # ========== PREPARE UPDATE DATA ==========
+  # Convert Pydantic model to dict and extract updated fields
+  post_dict = post.model_dump()  # Extract: title, content, published from request body
+  
+  # ========== SQL UPDATE WITH RETURNING CLAUSE ==========
+  # Query: UPDATE posts SET title = %s, content = %s, published = %s WHERE id = %s RETURNING *
+  # SET CLAUSE: Updates three columns with new values from request body
+  # WHERE CLAUSE: Filters to exact post (id is primary key = guaranteed unique match)
+  # PARAMETERIZED: Uses %s placeholders with tuple to prevent SQL injection
+  # RETURNING *: PostgreSQL clause that returns the UPDATED row (all columns after changes applied)
+  # EXECUTION: Database updates 1 row (or 0 if post disappeared, which shouldn't happen post-check)
+  cursor.execute("UPDATE posts SET title = %s, content = %s, published = %s WHERE id = %s RETURNING *", (post_dict["title"], post_dict["content"], post_dict["published"], str(id)))
+  
+  # ========== TRANSACTION COMMIT ==========
+  # conn.commit(): Makes the UPDATE permanent in database
+  # WITHOUT COMMIT: Changes sit in transaction buffer but aren't saved
+  conn.commit()  # Commit the transaction to permanently save the updated post
+  
+  # ========== FETCH UPDATED POST ==========
+  # cursor.fetchone(): Retrieves the row returned by RETURNING * clause
+  # Result includes: {id, title, content, published} with NEW values reflecting UPDATE applied
+  updated_post = cursor.fetchone() # Fetch the updated post with all current values from RETURNING clause
+  
+  return {"data": updated_post} # Return the updated post data in response body (FastAPI will convert this dict to JSON automatically)
+
+#use /redoc for alternative API documentation style (more detailed, better for large APIs)
+#We place this in app folder which has __init__.py file to make it a package, and we can run it with uvicorn main:app to start the server. Start it using the command app.main:app because we are inside the app package and main.py is the module that contains the FastAPI instance named 'app'.

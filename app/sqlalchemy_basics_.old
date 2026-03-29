@@ -1,0 +1,653 @@
+# ============ SQLALCHEMY BASICS - COMPLETE REFERENCE ============
+# This file contains comprehensive SQLAlchemy connection setup and basic commands
+# for future reference. SQLAlchemy is an ORM (Object-Relational Mapping) library
+# that allows you to interact with databases using Python objects instead of raw SQL.
+# 
+# SQLAlchemy Benefits Over Raw SQL:
+#   1. Type-safe queries (compiler catches errors)
+#   2. Prevents SQL injection automatically (parameterized queries)
+#   3. Database-agnostic (same code works with PostgreSQL, MySQL, SQLite, etc.)
+#   4. Relationship management (foreign keys, joins handled automatically)
+#   5. Better IDE support and autocomplete
+#   6. Cleaner, more Pythonic code
+
+
+# ============ PART 1: DATABASE CONNECTION SETUP ============
+
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.engine.url import URL
+
+# ========== METHOD 1: USING URL.create() (RECOMMENDED) ==========
+# This is the preferred way to construct database URLs in production
+# More secure because credentials are kept separate from URL logic
+
+url_object = URL.create(
+    drivername="postgresql",          # Database type (postgresql, mysql, sqlite, etc.)
+    username="postgres",              # Database user
+    password="postgreSunkale@1403",   # User password (SHOULD USE ENV VARIABLES IN PRODUCTION!)
+    host="localhost",                 # Database server location
+    database="fastapi"                # Database name
+)
+# Result: postgresql://postgres:postgreSunkale@1403@localhost/fastapi
+
+# ========== METHOD 2: USING STRING (LEGACY - NOT RECOMMENDED) ==========
+# Old approach - prone to typos and harder to maintain
+# DATABASE_URL = "postgresql://postgres:postgreSunkale@1403@localhost/fastapi"
+# Don't use this - use URL.create() instead for better error checking
+
+
+# ============ ENGINE: CONNECTION POOL MANAGER ============
+# Engine manages all database connections through a connection pool
+
+engine = create_engine(url_object)
+# What happens:
+#   1. create_engine() does NOT immediately connect to database
+#   2. It's a "lazy" connection - connects when first query runs
+#   3. Maintains a pool of reusable connections (default 10-20 connections)
+#   4. Automatically handles reconnects if connection dies
+#   5. Translates Python code to PostgreSQL SQL syntax
+
+# Configuration options (advanced):
+# engine = create_engine(url_object, echo=True)  # Print all SQL executed (debugging)
+# engine = create_engine(url_object, pool_size=20)  # Max connections in pool
+# engine = create_engine(url_object, pool_pre_ping=True)  # Test connection before using
+
+
+# ============ SESSION FACTORY: CREATES DATABASE SESSIONS ============
+# A Session is a workspace/conversation with the database
+
+sessionlocal = sessionmaker(
+    autocommit=False,      # Changes NOT auto-saved (must call commit())
+    autoflush=False,       # Explicit control over when changes flush to DB
+    bind=engine            # Connected to our PostgreSQL engine
+)
+
+# Why these settings?
+#   - autocommit=False: Safer because changes can be rolled back
+#   - autoflush=False: Developer has explicit control (must call flush/commit)
+#   - This setup is perfect for web APIs where each request is a transaction
+
+
+# ============ DECLARATIVE BASE: ORM MODEL REGISTRY ============
+# All model classes inherit from Base, which manages the ORM registry
+
+Base = declarative_base()
+# When creating models, every class that inherits from Base is registered
+# Later, Base.metadata.create_all() creates all tables in the database
+
+
+# ============ PART 2: DEFINING DATABASE MODELS (ORM) ============
+
+from sqlalchemy import Column, Integer, String, Boolean, DateTime
+from datetime import datetime
+
+# ========== POST MODEL EXAMPLE ==========
+# Each class represents a database table, each attribute represents a column
+
+class Post(Base):
+    __tablename__ = "posts"  # Database table name
+    
+    # Column Definition Syntax: Column(Type, constraints)
+    
+    # Primary Key - AUTO INCREMENT
+    id = Column(
+        Integer,
+        primary_key=True,    # Unique identifier, auto-increments
+        index=True,          # Create index for fast lookups
+        nullable=False       # NOT NULL constraint
+    )
+    
+    # Title Column - String/Text
+    title = Column(
+        String,              # VARCHAR in PostgreSQL (unlimited length by default)
+        index=True,          # Create index (speed up WHERE title = ? queries)
+        nullable=False       # NOT NULL - must always have a value
+    )
+    
+    # Content Column - String/Text
+    content = Column(
+        String,
+        index=True,
+        nullable=False
+    )
+    
+    # Published Status - Boolean
+    published = Column(
+        Boolean,             # BOOLEAN type in PostgreSQL (TRUE/FALSE only)
+        default=True,        # Default value if not provided in INSERT
+        nullable=False       # NOT NULL - must be TRUE or FALSE
+    )
+    
+    # Optional: Timestamp Column
+    created_at = Column(
+        DateTime,            # TIMESTAMP in PostgreSQL
+        default=datetime.utcnow,  # Auto-set to current time on creation
+        nullable=False
+    )
+
+
+# ============ CREATE TABLES AT APPLICATION STARTUP ============
+# This creates all tables in the database based on your models
+
+Base.metadata.create_all(bind=engine)
+
+# What happens:
+#   1. SQLAlchemy inspects all models (Post, User, etc.)
+#   2. Generates CREATE TABLE IF NOT EXISTS SQL for each
+#   3. Creates indexes for columns marked with index=True
+#   4. If table exists, does nothing
+#   5. Safe to call multiple times (idempotent)
+
+# Generated SQL equivalent:
+# CREATE TABLE IF NOT EXISTS posts (
+#     id SERIAL PRIMARY KEY,
+#     title VARCHAR NOT NULL,
+#     content VARCHAR NOT NULL,
+#     published BOOLEAN NOT NULL DEFAULT TRUE,
+#     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+# );
+# CREATE INDEX idx_posts_title ON posts(title);
+# CREATE INDEX idx_posts_content ON posts(content);
+# CREATE INDEX idx_posts_id ON posts(id);
+
+
+# ============ PART 3: DEPENDENCY INJECTION (FASTAPI INTEGRATION) ============
+
+from typing import Generator
+from fastapi import Depends
+
+# ========== GET_DB() FUNCTION FOR FASTAPI ==========
+# This function provides database sessions to endpoints using dependency injection
+
+def get_db() -> Generator:
+    """
+    Dependency injection function for FastAPI.
+    Provides a fresh database session to each endpoint.
+    """
+    # SETUP: Create a new session for this request
+    db = sessionlocal()
+    
+    try:
+        # YIELD: Give session to endpoint
+        yield db  # Endpoint receives 'db' here
+    
+    finally:
+        # CLEANUP: Close session after endpoint finishes
+        # Runs even if endpoint raises exception
+        db.close()  # Return connection to pool
+
+# How to use in FastAPI endpoints:
+# @app.get("/posts")
+# def get_posts(db: Session = Depends(get_db)):
+#     # db is a SQLAlchemy Session object
+#     posts = db.query(Post).all()
+#     return posts
+
+
+# ============ PART 4: BASIC SQLALCHEMY CRUD OPERATIONS ============
+# CRUD = Create, Read, Update, Delete
+
+# Assuming: from sqlalchemy.orm import Session
+# And: from fastapi import Depends
+
+# ========== CREATE (INSERT) ==========
+# Add a new post to the database
+
+def create_post_example(db: Session, title: str, content: str):
+    """
+    Create a new post in the database.
+    
+    Process:
+    1. Create a new Post instance (Python object)
+    2. Add to session (pending state)
+    3. Commit to database (persistent state)
+    4. Refresh to get auto-generated id
+    """
+    
+    # Create new Post object (not yet saved)
+    new_post = Post(
+        title=title,
+        content=content,
+        published=True
+    )
+    
+    # Add to session (pending - not yet in database)
+    db.add(new_post)
+    
+    # Commit transaction (saves to database permanently)
+    db.commit()
+    
+    # Refresh from database to get auto-generated id and timestamps
+    db.refresh(new_post)
+    
+    # Now new_post.id contains the auto-generated PRIMARY KEY
+    return new_post
+
+# SQL Generated: INSERT INTO posts (title, content, published) VALUES (?, ?, ?)
+
+
+# ========== READ (SELECT) ==========
+# Query and retrieve posts from the database
+
+def read_all_posts_example(db: Session):
+    """
+    Get all posts from the database.
+    Basic SELECT * query.
+    """
+    # db.query(Post) starts a query builder for Post table
+    # .all() executes query and returns all rows as Post objects
+    posts = db.query(Post).all()
+    return posts
+
+# SQL Generated: SELECT * FROM posts
+
+def read_post_by_id_example(db: Session, post_id: int):
+    """
+    Get a single post by id.
+    Returns None if post doesn't exist.
+    """
+    # .filter(Post.id == post_id) adds WHERE clause
+    # .first() returns first row (or None if no match)
+    post = db.query(Post).filter(Post.id == post_id).first()
+    return post
+
+# SQL Generated: SELECT * FROM posts WHERE id = ?
+
+def read_published_posts_example(db: Session):
+    """
+    Get only published posts.
+    Multiple conditions in filter.
+    """
+    # Can chain multiple filter() calls for AND conditions
+    posts = db.query(Post).filter(Post.published == True).all()
+    return posts
+
+# SQL Generated: SELECT * FROM posts WHERE published = TRUE
+
+def read_posts_with_multiple_filters_example(db: Session):
+    """
+    Query with multiple WHERE conditions.
+    """
+    # Method 1: Chain filters (AND condition)
+    posts = db.query(Post).filter(
+        Post.published == True,
+        Post.title.contains("Python")  # LIKE query
+    ).all()
+    
+    # Method 2: Use AND, OR operators
+    from sqlalchemy import and_, or_
+    posts = db.query(Post).filter(
+        and_(
+            Post.published == True,
+            or_(
+                Post.title.contains("Python"),
+                Post.content.contains("FastAPI")
+            )
+        )
+    ).all()
+    
+    return posts
+
+# SQL Generated: SELECT * FROM posts WHERE published = TRUE AND (title LIKE ? OR content LIKE ?)
+
+
+# ========== UPDATE (MODIFY) ==========
+# Change existing data in the database
+
+def update_post_example(db: Session, post_id: int, title: str, content: str):
+    """
+    Update an existing post.
+    
+    Process:
+    1. Query for the existing post
+    2. Modify the object attributes
+    3. Commit changes
+    4. Refresh to confirm changes
+    """
+    
+    # Find the post (throws exception if not found)
+    post = db.query(Post).filter(Post.id == post_id).first()
+    
+    if post is None:
+        return None  # Post not found
+    
+    # Modify object attributes (tracked by SQLAlchemy)
+    post.title = title
+    post.content = content
+    # SQLAlchemy automatically detects changes
+    
+    # Commit the changes to database
+    db.commit()
+    
+    # Refresh to get any database-computed values (timestamps, etc.)
+    db.refresh(post)
+    
+    return post
+
+# SQL Generated: UPDATE posts SET title = ?, content = ? WHERE id = ?
+
+def update_post_bulk_example(db: Session):
+    """
+    Update multiple posts at once (bulk update).
+    More efficient than updating one by one.
+    """
+    # Update all unpublished posts to published
+    db.query(Post).filter(Post.published == False).update(
+        {Post.published: True}
+    )
+    db.commit()
+    return "Updated all unpublished posts"
+
+# SQL Generated: UPDATE posts SET published = TRUE WHERE published = FALSE
+
+
+# ========== DELETE (REMOVE) ==========
+# Delete records from database
+
+def delete_post_example(db: Session, post_id: int):
+    """
+    Delete a post by id.
+    
+    Process:
+    1. Query for the post
+    2. Delete from session
+    3. Commit to database
+    """
+    
+    # Find the post
+    post = db.query(Post).filter(Post.id == post_id).first()
+    
+    if post is None:
+        return None  # Post not found
+    
+    # Delete from session (marks for deletion)
+    db.delete(post)
+    
+    # Commit to permanently delete from database
+    db.commit()
+    
+    return "Post deleted successfully"
+
+# SQL Generated: DELETE FROM posts WHERE id = ?
+
+def delete_posts_bulk_example(db: Session):
+    """
+    Delete multiple posts at once (bulk delete).
+    More efficient than deleting one by one.
+    """
+    # Delete all unpublished posts
+    db.query(Post).filter(Post.published == False).delete()
+    db.commit()
+    return "Deleted all unpublished posts"
+
+# SQL Generated: DELETE FROM posts WHERE published = FALSE
+
+
+# ============ PART 5: ADVANCED QUERY OPERATIONS ============
+
+def query_with_limiting_example(db: Session):
+    """
+    Limit number of results returned.
+    """
+    # Get first 10 posts
+    posts = db.query(Post).limit(10).all()
+    
+    # Get first 10 posts, skipping first 5 (pagination)
+    posts = db.query(Post).offset(5).limit(10).all()
+    
+    return posts
+
+# SQL Generated: SELECT * FROM posts LIMIT 10 OFFSET 5
+
+
+def query_with_ordering_example(db: Session):
+    """
+    Order results by column.
+    """
+    from sqlalchemy import desc  # desc for descending
+    
+    # Order by creation date (newest first)
+    posts = db.query(Post).order_by(desc(Post.created_at)).all()
+    
+    # Order by title (alphabetical)
+    posts = db.query(Post).order_by(Post.title).all()
+    
+    return posts
+
+# SQL Generated: SELECT * FROM posts ORDER BY created_at DESC
+
+
+def query_with_count_example(db: Session):
+    """
+    Count rows matching criteria.
+    """
+    # Count all posts
+    total_posts = db.query(Post).count()
+    
+    # Count published posts
+    published_count = db.query(Post).filter(Post.published == True).count()
+    
+    return {
+        "total": total_posts,
+        "published": published_count,
+        "unpublished": total_posts - published_count
+    }
+
+# SQL Generated: SELECT COUNT(*) FROM posts (WHERE published = TRUE)
+
+
+def query_distinct_example(db: Session):
+    """
+    Get distinct values.
+    """
+    # Get unique titles (no duplicates)
+    distinct_titles = db.query(Post.title).distinct().all()
+    
+    return distinct_titles
+
+# SQL Generated: SELECT DISTINCT title FROM posts
+
+
+# ============ PART 6: TRANSACTION MANAGEMENT ============
+
+def transaction_rollback_example(db: Session):
+    """
+    Demonstrates transaction commit and rollback.
+    """
+    try:
+        # Create multiple posts in one transaction
+        post1 = Post(title="Post 1", content="Content 1", published=True)
+        post2 = Post(title="Post 2", content="Content 2", published=True)
+        
+        db.add(post1)
+        db.add(post2)
+        
+        # If something goes wrong here:
+        raise Exception("Something went wrong!")
+        
+        # This commit never happens
+        db.commit()
+        
+    except Exception as error:
+        # Rollback ALL changes from this transaction
+        db.rollback()
+        print(f"Transaction failed: {error}")
+        print("All changes in this transaction have been undone")
+
+# Benefit: Either BOTH posts are created, or NEITHER is created
+# This is the ATOMICITY principle of ACID transactions
+
+
+def transaction_savepoint_example(db: Session):
+    """
+    Savepoints allow partial rollbacks within a transaction.
+    """
+    try:
+        post1 = Post(title="Post 1", content="Content 1", published=True)
+        db.add(post1)
+        db.flush()  # Save to database temporarily
+        
+        # Create a savepoint
+        savepoint = db.begin_nested()
+        
+        try:
+            post2 = Post(title="Post 2", content="Content 2", published=True)
+            db.add(post2)
+            # Some error happens here
+            raise Exception("Error creating post2")
+        except Exception as error:
+            # Rollback only post2, keep post1
+            savepoint.rollback()
+            print("Post2 was not saved, but Post1 is still pending")
+        
+        # Commit the main transaction (only post1 is committed)
+        db.commit()
+        
+    except Exception as error:
+        db.rollback()
+
+
+# ============ PART 7: COMMON PATTERNS AND BEST PRACTICES ============
+
+# ========== PATTERN 1: EAGER LOADING vs LAZY LOADING ==========
+# When you have related tables (relationships)
+
+def lazy_loading_example(db: Session, post_id: int):
+    """
+    Lazy Loading: Related data is loaded when accessed.
+    If you never access the relationship, it never queries.
+    But if you access it later, it causes an extra query (N+1 problem).
+    """
+    post = db.query(Post).filter(Post.id == post_id).first()
+    # At this point, post is loaded but relationships are NOT
+    
+    # When accessing relationship, causes another query
+    # comments = post.comments  # This triggers extra query if not in session
+    
+    return post
+
+
+def eager_loading_example(db: Session):
+    """
+    Eager Loading: Load relationships in the same query.
+    Prevents N+1 query problem.
+    """
+    from sqlalchemy.orm import joinedload
+    
+    # Load posts WITH their comments in one query
+    # posts = db.query(Post).options(joinedload(Post.comments)).all()
+    
+    return posts
+
+
+# ========== PATTERN 2: SESSION CONTEXT MANAGER ==========
+# Alternative to yield pattern for manual session management
+
+def manual_session_example():
+    """
+    Manual session management without dependency injection.
+    """
+    # Create a session manually
+    db = sessionlocal()
+    
+    try:
+        post = db.query(Post).filter(Post.id == 1).first()
+        return post
+    finally:
+        db.close()  # Always close to release connection
+
+
+# ========== PATTERN 3: BULK OPERATIONS ==========
+# More efficient for multiple changes
+
+def bulk_insert_example(db: Session):
+    """
+    Insert multiple rows efficiently.
+    More efficient than adding one by one.
+    """
+    posts_data = [
+        {"title": "Post 1", "content": "Content 1", "published": True},
+        {"title": "Post 2", "content": "Content 2", "published": False},
+        {"title": "Post 3", "content": "Content 3", "published": True},
+    ]
+    
+    # Method 1: Add multiple objects
+    posts = [Post(**data) for data in posts_data]
+    db.add_all(posts)
+    db.commit()
+    
+    # Method 2: Bulk insert (raw SQL, faster)
+    # db.execute("INSERT INTO posts (title, content) VALUES (:title, :content)", posts_data)
+    # db.commit()
+
+
+# ========== PATTERN 4: ERROR HANDLING ==========
+# Proper exception handling with SQLAlchemy
+
+from sqlalchemy.exc import SQLAlchemyError, IntegrityError
+
+def error_handling_example(db: Session):
+    """
+    Handle SQLAlchemy exceptions properly.
+    """
+    try:
+        post = Post(title="Test", content="Test content")
+        db.add(post)
+        db.commit()
+    
+    except IntegrityError as e:
+        # Triggered by database constraints (unique, foreign key, etc.)
+        db.rollback()
+        print(f"Integrity error: {e}")
+    
+    except SQLAlchemyError as e:
+        # Base class for all SQLAlchemy exceptions
+        db.rollback()
+        print(f"Database error: {e}")
+    
+    except Exception as e:
+        # Catch-all for other errors
+        db.rollback()
+        print(f"Unexpected error: {e}")
+
+
+# ============ PART 8: SQLALCHEMY VS RAW SQL COMPARISON ============
+
+# TASK: Get post with ID 5
+
+# Method 1: Raw SQL (psycopg2 - OLD APPROACH)
+# cursor.execute("SELECT * FROM posts WHERE id = %s", (5,))
+# post = cursor.fetchone()
+# # Returns: {'id': 5, 'title': '...', 'content': '...'}
+
+# Method 2: SQLAlchemy ORM (NEW APPROACH)
+# db = sessionlocal()
+# post = db.query(Post).filter(Post.id == 5).first()
+# # Returns: Post object with attributes: post.id, post.title, post.content
+# # Type-safe, easier to use, and less error-prone
+
+
+# ============ SUMMARY ============
+#
+# SQLAlchemy Three-Layer Architecture:
+#
+# Layer 1: Engine (create_engine)
+#   └─ Manages connection pooling and raw database driver
+#
+# Layer 2: Session Factory (sessionmaker)
+#   └─ Creates Session objects for each request/conversation
+#
+# Layer 3: Sessions (via get_db)
+#   └─ Query interface - what you use in your code
+#
+# Flow:
+# engine ──> connection pool ──> sessionmaker ──> Session ──> Query/CRUD
+#
+# For FastAPI:
+# Endpoint ──Depends(get_db)──> get_db() ──> Session ──> db.query(), db.add(), etc.
+#
+# Key Takeaway:
+# SQLAlchemy lets you write Python code instead of SQL.
+# It handles parameterization, type conversion, and SQL generation automatically.
