@@ -14,6 +14,7 @@ resource "azurerm_linux_web_app" "fastapi" {
   location            = azurerm_service_plan.fastapi.location
   service_plan_id     = azurerm_service_plan.fastapi.id
   
+  
 
   site_config {
     application_stack {
@@ -22,6 +23,8 @@ resource "azurerm_linux_web_app" "fastapi" {
     }
     always_on = false
     app_command_line = "gunicorn -w 4 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8000 app.main:app"
+    
+    
     
   }
   app_settings                    = {

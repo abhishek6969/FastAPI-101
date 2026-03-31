@@ -4,4 +4,3 @@ resource "azurerm_resource_group" "fastapi" {
   location = var.location
 } 
 
-
