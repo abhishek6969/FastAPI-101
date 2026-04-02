@@ -5,7 +5,7 @@ resource "azurerm_service_plan" "fastapi" {
   resource_group_name = azurerm_resource_group.fastapi.name
   location            = azurerm_resource_group.fastapi.location
   os_type             = "Linux"
-  sku_name            = "F1"
+  sku_name            = "B1"
 }
 
 resource "azurerm_linux_web_app" "fastapi" {
@@ -13,29 +13,28 @@ resource "azurerm_linux_web_app" "fastapi" {
   resource_group_name = azurerm_resource_group.fastapi.name
   location            = azurerm_service_plan.fastapi.location
   service_plan_id     = azurerm_service_plan.fastapi.id
-  
-  
+
+
 
   site_config {
     application_stack {
-      python_version = "3.13"
-      
+      docker_image_name        = "lirook6969/kodekloudproject-api:latest"
+      docker_registry_url      = "https://index.docker.io"
+      docker_registry_username = "lirook6969"
+      docker_registry_password = data.azurerm_key_vault_secret.fastapi-dockerpass.value
     }
-    always_on = false
-    app_command_line = "gunicorn -w 4 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8000 app.main:app"
-    
-    
-    
+
   }
-  app_settings                    = {
+  app_settings = {
     "ACCESS_TOKEN_EXPIRE_MINUTES" = "30"
     "DATABASE_DRIVER"             = "postgresql"
-    "DATABASE_HOST"               = "lirook-fastapi.postgres.database.azure.com"
+    "DATABASE_HOSTNAME"           = "lirook-fastapi.postgres.database.azure.com"
     "DATABASE_NAME"               = "fastapi"
     "DATABASE_PASSWORD"           = data.azurerm_key_vault_secret.fastapi-db.value
     "DATABASE_PORT"               = "5432"
-    "DATABASE_USER"               = "psqladmin"
-    "SECRET_KEY"                   = data.azurerm_key_vault_secret.fastapi-apikey.value
+    "DATABASE_USERNAME"           = "psqladmin"
+    "SECRET_KEY"                  = data.azurerm_key_vault_secret.fastapi-apikey.value
     "ALGORITHM"                   = "HS256"
+    "WEBSITES_PORT"               = 8000
   }
 }

@@ -1,17 +1,84 @@
+# ====================================================================
+# SYSTEMD SERVICE FILE - Gunicorn FastAPI Application
+# ====================================================================
+# Purpose: Define a system service to manage Gunicorn server for FastAPI app
+# Location: Copy this file to /etc/systemd/system/gunicorn.service
+# Usage: Enable and start the service to auto-manage application lifecycle
+#
+# Commands:
+#   sudo systemctl daemon-reload     # Reload systemd after editing this file
+#   sudo systemctl start gunicorn    # Start the service
+#   sudo systemctl stop gunicorn     # Stop the service
+#   sudo systemctl restart gunicorn  # Restart the service
+#   sudo systemctl status gunicorn   # Check service status
+#   sudo systemctl enable gunicorn   # Auto-start on system boot
+#   sudo journalctl -fu gunicorn     # View service logs in real-time
+# ====================================================================
+
 [Unit]
+# ========== SERVICE METADATA ==========
+# Human-readable description of what this service does
 Description=gunicorn instance to server api
+
+# ========== SERVICE DEPENDENCIES ==========
+# This service should start only after the network is available
+# Prevents startup errors if network is not yet initialized
 After=network.target
 
+
 [Service]
+# ========== USER AND GROUP PERMISSIONS ==========
+# User account that will run the Gunicorn process
+# Using a dedicated non-root user ('student') improves security
+# Prevents accidental privilege escalation via the web application
 User=student
+
+# System group that the Gunicorn process belongs to
+# Used for file permissions and access control
 Group=student
+
+# ========== WORKING DIRECTORY ==========
+# Directory where Gunicorn process will be executed from
+# Should be the FastAPI project root directory containing app/
 WorkingDirectory=/home/student/fastapi/src/
+
+# ========== ENVIRONMENT VARIABLES ==========
+# Set the PATH to use the virtual environment's Python interpreter
+# This ensures the correct version of Python and installed packages are used
+# rather than system-wide Python which might be outdated or different
 Environment="PATH=/home/student/fastapi/venv/bin"
+
+# ========== PROCESS STARTUP COMMAND ==========
+# Full path to the Gunicorn executable (in the virtual environment)
+# Flags:
+#   -w 4 : Run 4 worker processes (handle concurrent requests)
+#          Typically set to (2 × CPU cores) + 1 for optimal performance
+#   -k uvicorn.workers.UvicornWorker : Use Uvicorn worker class for ASGI support
+#          Allows FastAPI's async features and WebSocket support
+#   app.main:app : Reference to the FastAPI application instance
+#          Module path (app.main) and variable name (app)
+#   --bind 0.0.0.0:8000 : Listen on all network interfaces, port 8000
 ExecStart=/home/student/fastapi/venv/bin/gunicorn -w 4 -k uvicorn.workers.UvicornWorker app.main:app --bind 0.0.0.0:8000
+
+# ========== ENVIRONMENT FILE ==========
+# Load environment variables from .env file (passwords, secrets, API keys, etc.)
+# These variables are injected into the Gunicorn process environment
+# Location: /home/student/.env (should be chmod 600 for security)
 EnvironmentFile=/home/student/.env
+
+# ========== RESTART BEHAVIOR ==========
+# Determines if systemd automatically restarts the service on failure
+# "always" means restart regardless of exit code or signal
 Restart=always
+
+# Time to wait (in seconds) between restart attempts
+# Prevents rapid restart loops that could burden system resources
 RestartSec=10
 
 
+# ========== INSTALLATION TARGET ==========
 [Install]
+# Target runlevel where this service should be enabled
+# "multi-user.target" is the standard multi-user system level
+# Service will auto-start on system boot if enabled via 'systemctl enable'
 WantedBy=multi-user.target

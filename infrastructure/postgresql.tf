@@ -5,13 +5,13 @@ resource "azurerm_postgresql_flexible_server" "fastapi" {
   administrator_login    = "psqladmin"
   administrator_password = data.azurerm_key_vault_secret.fastapi-db.value
   backup_retention_days  = 7
-  version = "18"
+  version                = "18"
   sku_name               = "B_Standard_B1ms"
-  storage_mb   = 32768
-  storage_tier = "P4"
-  zone = 2
+  storage_mb             = 32768
+  storage_tier           = "P4"
+  zone                   = 2
   lifecycle {
-    ignore_changes = [ zone ]
+    ignore_changes = [zone]
   }
 
 }

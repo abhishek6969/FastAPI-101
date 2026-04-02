@@ -1,0 +1,68 @@
+# ====================================================================
+# DOCKER COMPOSE - Production Environment Configuration
+# ====================================================================
+# Purpose: Define production-grade containerized services for FastAPI + PostgreSQL
+# Use Case: Azure deployment, CI/CD pipelines, production environments
+# Version: Compose format version 3 (compatible with most Docker versions)
+# 
+# NOTE: This file references Dockerfile.prd which includes:
+#       - SSH server for Azure App Service remote debugging
+#       - Gunicorn + Uvicorn for production workloads
+#       - Optimized for production security and performance
+# ====================================================================
+
+# Docker Compose version - version 3 supports most cloud deployments
+version: "3"
+
+# ====================================================================
+# SERVICES SECTION - Define all containers that comprise the application
+# ====================================================================
+services:
+  # ========== API SERVICE CONFIGURATION ==========
+  # FastAPI application server - main REST API backend
+  api:
+    # ========== BUILD CONFIGURATION ==========
+    # Instead of using a pre-built image, build from Dockerfile
+    # context: . points to the current directory (where docker-compose-prd.yml is located)
+    # dockerfile: Dockerfile.prd uses the production-optimized Docker image
+    build:
+      context: .
+      dockerfile: Dockerfile.prd  # Points to production Dockerfile with SSH + Gunicorn
+
+    # ========== IMAGE TAGGING ==========
+    # Tag the built image with a registry path and version
+    # Format: registry/image-name:tag
+    # 'latest' tag: automatically points to the most recent build
+    # Can be deployed to Docker registries (Docker Hub, Azure Container Registry, etc.)
+    image: lirook6969/kodekloudproject-api:latest
+
+    # ========== PORT MAPPING ==========
+    # Container Port 8000 → Host/External Port 80
+    # This allows external clients to access the API on port 80 (standard HTTP)
+    # The Gunicorn server inside the container listens on 0.0.0.0:8000
+    ports:
+      - 80:8000
+
+    # ========== DEBUGGING NOTE ==========
+    # Uncomment the line below to pause the container for debugging
+    # Useful for inspecting container filesystem and logs without service running
+    # command: ["sleep", "10000"]  # Sleeps for 10000 seconds (prevents immediate exit)
+
+
+# ====================================================================
+# BUILD AND RUN COMMANDS
+# ====================================================================
+# Build production image (fresh, no cache):
+#   docker compose -f docker-compose-prd.yml build --no-cache
+#
+# Start production containers:
+#   docker compose -f docker-compose-prd.yml up -d
+#
+# Combined build and run:
+#   docker compose -f docker-compose-prd.yml build --no-cache && docker compose -f docker-compose-prd.yml up -d
+#
+# View logs:
+#   docker compose -f docker-compose-prd.yml logs -f api
+#
+# Stop containers:
+#   docker compose -f docker-compose-prd.yml down

@@ -1,0 +1,59 @@
+# ====================================================================
+# DOCKERFILE.PRD - Production Environment for Azure App Service
+# ====================================================================
+# Purpose: Build a production-ready FastAPI container for Azure deployment
+# Base Image: Python 3.13 (lightweight, latest stable)
+# Special: Includes SSH server for Azure App Service remote debugging
+#          Uses Gunicorn + Uvicorn for production-grade WSGI server
+#          Configured for Azure's container monitoring and management
+# ====================================================================
+
+FROM python:3.13
+
+# ========== STAGE 1: INSTALL SSH FOR AZURE APP SERVICE ==========
+# Azure App Service requires SSH access for remote debugging, log streaming,
+# and container management. This is a mandatory requirement from Azure.
+# Install OpenSSH server and set root password for Azure's internal tunnel
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    openssh-server \
+    && echo "root:Docker!" | chpasswd \
+    && rm -rf /var/lib/apt/lists/*
+
+# ========== STAGE 2: CONFIGURE SSH FOR AZURE ==========
+# Azure App Service uses specific SSH configuration for secure container management
+# The sshd_config file contains Azure-mandated SSH settings
+COPY sshd_config /etc/ssh/
+
+# ========== STAGE 3: SET UP APPLICATION DEPENDENCIES ==========
+WORKDIR /usr/src/app
+COPY requirements.txt ./
+# Install Python production dependencies (no cache to reduce image size)
+RUN pip install --no-cache-dir -r requirements.txt
+
+# ========== STAGE 4: COPY APPLICATION CODE ==========
+COPY . .
+
+# ========== EXPOSE PORTS ==========
+# Port 8000: FastAPI application HTTP server
+# Port 2222: SSH server for Azure App Service remote access
+EXPOSE 8000 2222
+
+# ========== ENTRYPOINT: START SSH + GUNICORN ==========
+# Command explanation:
+#   1. "sh -c" allows us to run multiple commands in sequence
+#   2. "service ssh start" - starts SSH server (required by Azure App Service)
+#   3. "gunicorn" - production WSGI HTTP server
+#      - --workers 4: spawn 4 worker processes for concurrent request handling
+#      - --bind 0.0.0.0:8000: listen on all interfaces, port 8000
+#      - --worker-class uvicorn.workers.UvicornWorker: use ASGI worker for async support
+#      - app.main:app: WSGI callable reference (module.app:app_instance)
+CMD ["sh", "-c", "service ssh start && gunicorn --workers 4 --bind 0.0.0.0:8000 --worker-class uvicorn.workers.UvicornWorker app.main:app"]
+
+# ========== DATABASE MIGRATIONS (MANUAL PROCESS) ==========
+# For automated database migrations via Alembic:
+# Uncomment below and run in a separate deployment step or within the container:
+#
+# export $(cat /proc/1/environ | tr '\0' '\n' | xargs)
+# alembic upgrade head
+#
+# Note: This should be automated in CI/CD pipeline for zero-downtime deployments

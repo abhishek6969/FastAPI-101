@@ -1,7 +1,7 @@
 # FastAPI 101 - Technical Architecture & Component Integration Guide
 
 **Purpose:** Deep-dive into the technical architecture of the FastAPI social media API project, focusing on how components interact and the reasoning behind design decisions.
-
+ 
 **For beginners?** Start with README.md, then refer back here for detailed explanations.
 
 ---

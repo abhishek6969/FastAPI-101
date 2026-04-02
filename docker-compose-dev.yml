@@ -1,0 +1,65 @@
+# Docker Compose 101 - Multi-container application setup
+# This file defines the services needed to run the FastAPI application with PostgreSQL
+# Version 3 syntax supports most Docker features and is widely compatible
+version: "3"
+
+# Services define the containers that will run
+services:
+  # API service - the FastAPI application
+  api:
+    # Build the image from the Dockerfile in the current directory
+    build: .
+    # Port mapping: expose port 8000 inside the container as port 80 on the host machine
+    ports:
+      - 80:8000
+    volumes:
+      - ./:/usr/src/app:ro # this step will mount current volume will all dockerignored files but its fine in dev environment.
+
+    depends_on:
+      - postgres
+    # Environment variables passed into the container
+    environment:
+      # Database connection details
+      - DATABASE_HOSTNAME=postgres  # Service name 'postgres' used as hostname (Docker DNS)
+      - DATABASE_PORT=5432           # Default PostgreSQL port
+      - DATABASE_PASSWORD=postgreSunkale@1403
+      - DATABASE_NAME=fastapi        # Database name to connect to
+      - DATABASE_USERNAME=postgres
+      # Security settings
+      - SECRET_KEY=09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7  # JWT signing key
+      - ALGORITHM=HS256              # JWT algorithm
+      # Application settings
+      - ACCESS_TOKEN_EXPIRE_MINUTES=30  # JWT token expiration
+      - DATABASE_DRIVER=postgresql      # Database driver specification
+    command: "uvicorn app.main:app --reload --host 0.0.0.0 --port 8000"
+
+  # PostgreSQL database service
+  postgres:
+    # Use official PostgreSQL image from Docker Hub
+    image: postgres:18.3
+    # Always restart the container if it stops
+    restart: always
+    # Shared memory configuration for performance
+    shm_size: 128mb
+    # Environment variables for PostgreSQL setup
+    environment:
+      # Initial superuser password (set during first startup only)
+      POSTGRES_PASSWORD: postgreSunkale@1403
+      # Initial superuser username
+      POSTGRES_USER: postgres
+      # Initial database to create
+      POSTGRES_DB: fastapi
+    # Port mapping: expose PostgreSQL on port 5432 (internal and external)
+    ports:
+      - 5432:5432
+    # Volume for persistent data storage (survives container deletion)
+    volumes:
+      - postgre-db:/var/lib/postgresql  
+
+# Top-level volumes section - defines named volumes
+# Named volumes are managed by Docker and persist data between container restarts
+volumes:
+  # 'postgre-db' volume used by the postgres service
+  postgre-db:
+
+# docker compose -f docker-compose-dev.yml  build --no-cache && docker compose -f docker-compose-dev.yml up -d

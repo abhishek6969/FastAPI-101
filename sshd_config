@@ -1,0 +1,64 @@
+# ====================================================================
+# SSH SERVER CONFIGURATION FILE FOR AZURE APP SERVICE
+# ====================================================================
+# Purpose: Configure OpenSSH daemon for Azure Container Instances
+# Usage: Copied to /etc/ssh/sshd_config during Docker image build
+# 
+# These settings are REQUIRED by Azure App Service for:
+# - Remote debugging and console access
+# - Log streaming and container monitoring
+# - Secure container shell access
+#
+# WARNING: Modifying these settings may break Azure App Service functionality
+# Do not change without understanding Azure's container requirements
+# ====================================================================
+
+# ========== SSH SERVER LISTENING PORT ==========
+# Custom SSH port to avoid conflicts with host SSH (standard port 22)
+# Azure App Service maps container port 2222 to internal management tunnel
+# This allows Azure to communicate with SSH server inside container
+# Value: 2222 (non-standard port for container isolation)
+Port 2222
+
+# ========== NETWORK INTERFACES ==========
+# Listen on all available network interfaces (0.0.0.0)
+# Ensures SSH server is accessible from Azure's container management network
+# 0.0.0.0 binds to IPv4 on all interfaces; :: binds to IPv6 on all interfaces
+ListenAddress 0.0.0.0
+
+# ========== CONNECTION TIMEOUT ==========
+# Grace period (in seconds) for client to complete authentication after connection
+# If client doesn't authenticate within this time, connection is closed
+# Azure's internal tools typically authenticate within a few seconds
+# Value: 180 seconds = 3 minutes (reasonable grace period)
+LoginGraceTime 180
+
+# ========== ROOT LOGIN PERMISSION ==========
+# Allow SSH login as root user
+# SECURITY NOTE: This is enabled for Azure's container management needs
+#                In production deployments, consider:
+#                - Restricting to specific IP addresses (Azure's internal IPs)
+#                - Using key-based authentication instead of passwords
+#                - Creating a dedicated non-root service account for SSH access
+# Value: yes (root login allowed for Azure management)
+PermitRootLogin yes
+
+# ========== PASSWORD AUTHENTICATION ==========
+# Allow login using username/password authentication
+# Azure App Service uses the hardcoded root password set in Dockerfile.prd:
+#   echo "root:Docker!" | chpasswd
+# This credential is only used by Azure's internal management systems
+# Value: yes (password authentication enabled)
+PasswordAuthentication yes
+
+# ========== STRICT MODES ==========
+# Enable strict checking of SSH configuration and file permissions
+# Rejects connections if SSH key files have incorrect permissions
+# This is a security best practice to prevent unauthorized access
+# Value: yes (strict mode enabled for better security)
+StrictModes yes
+
+# ========== AZURE-SPECIFIC NOTE ==========
+# Azure App Service uses this specific password ("Docker!") for the internal 
+# management tunnel. This is not a user-facing credential and is only accessible
+# to Azure's internal systems. The SSH server is NOT exposed on the public internet.

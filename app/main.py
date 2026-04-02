@@ -48,7 +48,7 @@ app.include_router(vote.router)
 @app.get("/")
 def root():
     """Root endpoint for API health check"""
-    return {"message": "FastAPI Server is running!"}
+    return {"message": "FastAPI Server is running!!"}
 
 
 
