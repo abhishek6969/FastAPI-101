@@ -56,10 +56,35 @@ services:
     volumes:
       - postgre-db:/var/lib/postgresql  
 
+  # PostgreSQL test database service
+  postgres_test:
+    # Use official PostgreSQL image from Docker Hub
+    image: postgres:18.3
+    # Always restart the container if it stops
+    restart: always
+    # Shared memory configuration for performance
+    shm_size: 128mb
+    # Environment variables for PostgreSQL setup
+    environment:
+      # Initial superuser password (set during first startup only)
+      POSTGRES_PASSWORD: postgreSunkale@1403
+      # Initial superuser username
+      POSTGRES_USER: postgres
+      # Initial database to create
+      POSTGRES_DB: fastapi_test
+    # Port mapping: expose PostgreSQL on port 5433 (different port)
+    ports:
+      - 5433:5432
+    # Volume for persistent data storage (survives container deletion)
+    volumes:
+      - postgre-db-test:/var/lib/postgresql  
+
 # Top-level volumes section - defines named volumes
 # Named volumes are managed by Docker and persist data between container restarts
 volumes:
   # 'postgre-db' volume used by the postgres service
   postgre-db:
+  # 'postgre-db-test' volume used by the postgres_test service
+  postgre-db-test:
 
 # docker compose -f docker-compose-dev.yml  build --no-cache && docker compose -f docker-compose-dev.yml up -d

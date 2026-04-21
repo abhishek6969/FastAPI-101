@@ -1,0 +1,228 @@
+"""
+Pytest Basics & Requirements:
+
+1. Naming Conventions:
+   - Test files must start with `test_` or end with `_test.py` (e.g., `test_app.py`).
+   - Test functions must start with `test_` (e.g., `def test_add():`).
+   - Test classes must start with `Test` and cannot have an `__init__` method.
+
+2. Existence of __init__.py files:
+   - While Pytest doesn't strictly require `__init__.py` files in test directories to discover tests, 
+     having them is generally recommended. It makes the test folder a package, avoiding naming 
+     collisions if multiple directories contain a test file with the same name.
+
+3. How to Run:
+   - Run all tests: `pytest`
+   - Run a specific file: `pytest test/test_app.py`
+   - Run a specific test function: `pytest test/test_app.py::test_add`
+   - Run with verbose output: `pytest -v`
+   - Run and print standard output (e.g., print statements): `pytest -s`
+"""
+
+# Import the functions and classes we want to test
+from test_addition.calculator import add_nums , subtract_nums , multiply_nums , divide_nums , BankAccount
+import pytest
+
+# ==================== FIXTURES ====================
+# FIXTURE: A pytest feature that provides test data/setup
+# Fixtures are created once and reused across multiple tests
+# They follow the form: @pytest.fixture followed by a function
+# Benefits:
+#   - Eliminates code duplication across tests
+#   - Provides consistent test data
+#   - Automatically called when test function has fixture name as parameter
+
+@pytest.fixture
+def bank_account():
+  """
+  FIXTURE: Provides a BankAccount instance with $50 balance.
+  
+  Usage: Pass 'bank_account' as a parameter to any test function
+  Example: def test_withdraw(bank_account):
+           This automatically injects a fresh BankAccount(50) for this test
+  """
+  return BankAccount(50)
+
+@pytest.fixture
+def zero_bank_account():
+  """
+  FIXTURE: Provides a BankAccount instance with $0 balance.
+  
+  Usage: Pass 'zero_bank_account' as a parameter to test functions
+  This is useful for testing edge cases (empty account scenarios)
+  """
+  return BankAccount(0)
+
+
+
+
+
+# ==================== PARAMETRIZED TESTS ====================
+# PARAMETRIZE: A pytest marker that runs the same test multiple times with different inputs
+# Benefits:
+#   - Test the same function with various input combinations
+#   - Reduce code duplication
+#   - Easier to spot edge cases
+# Format: @pytest.mark.parametrize("param1, param2, ...", [tuple1, tuple2, ...])
+
+@pytest.mark.parametrize("num1, num2, expected", [
+  (1, 2, 3),        # Test case 1: 1 + 2 should equal 3
+  (2, 4, 6)         # Test case 2: 2 + 4 should equal 6
+])
+def test_add(num1, num2, expected):
+  """
+  TEST: Verify that add_nums() correctly adds two numbers.
+  
+  This test runs twice (once for each tuple in parametrize):
+    - First with num1=1, num2=2, expected=3
+    - Second with num1=2, num2=4, expected=6
+  
+  The ASSERTION checks if the actual result matches the expected result.
+  If the condition is False, the test fails.
+  """
+  # ASSERTION: Checks for equality. Fails if condition is False
+  assert add_nums(num1=num1, num2=num2) == expected
+
+
+# ==================== SIMPLE ASSERTION TESTS ====================
+# ASSERTION: assert <condition> - passes if condition is True, fails if False
+# These tests use simple assertions without parametrization
+
+def test_subtract():
+  """
+  TEST: Verify that subtract_nums() correctly subtracts two numbers.
+  Simple case: 5 - 3 should equal 2
+  """
+  # ASSERTION: Checks if subtract produces the expected result
+  assert subtract_nums(5, 3) == 2
+  
+def test_multiply():
+  """
+  TEST: Verify that multiply_nums() correctly multiplies two numbers.
+  Simple case: 2 * 3 should equal 6
+  """
+  # ASSERTION: Checks if multiplication produces the expected result
+  assert multiply_nums(2, 3) == 6 
+  
+def test_divide():
+  """
+  TEST: Verify that divide_nums() correctly divides two numbers.
+  Simple case: 6 / 2 should equal 3
+  """
+  # ASSERTION: Checks if division produces the expected result
+  assert divide_nums(6, 2) == 3
+  
+
+# ==================== TESTS USING FIXTURES ====================
+# These tests use the 'bank_account' fixture defined above
+# The fixture automatically provides a fresh BankAccount(50) for each test
+
+def test_bank_set_initial_amount(bank_account):
+  """
+  TEST: Verify that BankAccount initializes with the correct balance.
+  
+  Parameter: bank_account - a BankAccount fixture with $50 balance
+  Assertion: Check that the initial balance is set correctly
+  """
+  # ASSERTION: Verify the account starts with $50
+  assert bank_account.balance == 50
+  
+  
+def test_bank_withdraw(bank_account):
+  """
+  TEST: Verify that withdraw() correctly reduces the account balance.
+  
+  Setup: Start with $50 (from fixture)
+  Action: Withdraw $20
+  Expected: New balance should be $30
+  """
+  # ACTION: Perform the operation being tested
+  bank_account.withdraw(20)
+  # ASSERTION: Verify the expected result
+  assert bank_account.balance == 30
+  
+# ==================== EXCEPTION TESTING ====================
+# EXCEPTION TESTING: Verify that code raises expected errors
+# Use: with pytest.raises(ExceptionType):
+# This is crucial for testing error handling and edge cases
+
+def test_zero_bank_withdraw(zero_bank_account):
+  """
+  TEST: Verify that withdraw() raises ValueError when account is empty.
+  
+  This demonstrates EXCEPTION TESTING - making sure code fails gracefully
+  when given invalid input (trying to withdraw more than balance).
+  
+  Setup: Start with $0 (from zero_bank_account fixture)
+  Action: Try to withdraw $20 (more than available)
+  Expected: Should raise a ValueError exception
+  """
+  # EXCEPTION TESTING: with pytest.raises(ExceptionType):
+  # Code inside this block MUST raise the specified exception
+  # If no exception is raised, the test fails
+  with pytest.raises(ValueError):
+    zero_bank_account.withdraw(20)  # This will raise ValueError
+    print("Cannot withdraw from an empty bank account")
+  
+  # ASSERTION: Verify the balance wasn't changed by the failed withdrawal
+  assert zero_bank_account.balance == 0
+  
+
+# ==================== COMPLEX PARAMETRIZED TESTS ====================
+# Combining PARAMETRIZATION with FIXTURES for comprehensive testing
+# This test runs multiple times with different combinations of operations
+
+@pytest.mark.parametrize("deposit, withdrew, expected", [
+  (100, 20, 130),      # Test case 1: Start with $50, deposit $100, withdraw $20 = $130
+  (2000, 400, 1650),   # Test case 2: Start with $50, deposit $2000, withdraw $400 = $1650
+])
+def test_bank_deposit_withdraw(bank_account, deposit, withdrew, expected):
+  """
+  TEST: Verify that multiple operations (deposit then withdraw) work correctly.
+  
+  This test combines two features:
+    1. FIXTURE: bank_account provides $50 starting balance
+    2. PARAMETRIZE: Test runs with multiple combinations of deposit/withdraw amounts
+  
+  Test flow:
+    1. Start with initial balance from fixture ($50)
+    2. Perform deposit
+    3. Perform withdrawal
+    4. Verify final balance matches expected
+  
+  This is a realistic test since real bank accounts have multiple transactions.
+  """
+  # ACTION: Perform deposit
+  bank_account.deposit(deposit)
+  # ACTION: Perform withdrawal
+  bank_account.withdraw(withdrew)
+  # ASSERTION: Verify the final balance is correct
+  assert bank_account.balance == expected
+  
+# ==================== EXCEPTION TESTING WITH PARAMETRIZATION ====================
+# Combining exception testing with parametrized inputs for edge case testing
+
+@pytest.mark.parametrize("deposit, withdrew, expected", [
+  (10, 70, -10)  # Test case: Start with $50, deposit $10, try to withdraw $70 (exceeds balance)
+])
+def test_exception_bank_deposit_withdraw(bank_account, deposit, withdrew, expected):
+  """
+  TEST: Verify that withdraw() raises an exception when attempting to withdraw
+        more than the available balance, even after a deposit.
+  
+  This demonstrates EXCEPTION TESTING combined with PARAMETRIZATION.
+  It tests the edge case where:
+    - Account starts with $50
+    - User deposits $10 (total: $60)
+    - User tries to withdraw $70 (more than available $60)
+    - Should raise an exception
+  
+  This is an important edge case test because it verifies the system
+  prevents invalid operations that would result in negative balance.
+  """
+  # EXCEPTION TESTING: All code in this block must raise an exception
+  # If an exception is raised at any point, the test passes
+  with pytest.raises(Exception):
+    bank_account.deposit(deposit)      # Deposit $10
+    bank_account.withdraw(withdrew)    # Try to withdraw $70 - this raises ValueError
+    assert bank_account.balance == expected  # Won't reach here if exception raised

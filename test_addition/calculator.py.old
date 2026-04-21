@@ -1,0 +1,130 @@
+
+
+"""
+Calculator Module
+
+This module contains simple arithmetic functions and a BankAccount class.
+These are used for demonstrating pytest testing concepts.
+"""
+
+def add_nums(num1: int, num2: int) -> int:
+  """
+  Add two numbers and return the sum.
+  
+  Args:
+      num1: First number to add
+      num2: Second number to add
+  
+  Returns:
+      The sum of num1 and num2
+  """
+  return num1 + num2
+
+def subtract_nums(num1: int, num2: int) -> int:
+  """
+  Subtract the second number from the first and return the result.
+  
+  Args:
+      num1: Number to subtract from (minuend)
+      num2: Number to subtract (subtrahend)
+  
+  Returns:
+      The difference (num1 - num2)
+  """
+  return num1 - num2
+
+def multiply_nums(num1: int, num2: int) -> int:
+  """
+  Multiply two numbers and return the product.
+  
+  Args:
+      num1: First number to multiply
+      num2: Second number to multiply
+  
+  Returns:
+      The product of num1 and num2
+  """
+  return num1 * num2
+
+def divide_nums(num1: int, num2: int) -> int:
+  """
+  Divide the first number by the second and return the quotient.
+  
+  Args:
+      num1: Number to be divided (dividend)
+      num2: Number to divide by (divisor)
+  
+  Returns:
+      The quotient (num1 / num2)
+  
+  Note:
+      This function performs regular division, not integer division.
+  """
+  return num1 / num2
+
+
+class BankAccount:
+  """
+  A simple bank account class for managing deposits and withdrawals.
+  
+  This class demonstrates state management and exception handling,
+  which are key concepts in unit testing.
+  
+  Attributes:
+      balance (float): Current account balance
+  """
+  
+  def __init__(self, balance: float = 0.0):
+      """
+      Initialize a bank account with an optional starting balance.
+      
+      Args:
+          balance: Starting balance (default: 0.0)
+      """
+      self.balance = balance
+
+  def deposit(self, amount: float):
+      """
+      Add money to the account.
+      
+      Args:
+          amount: Amount to deposit
+      
+      Returns:
+          The new account balance after deposit
+      """
+      self.balance += amount
+      return self.balance
+
+  def withdraw(self, amount: float):
+      """
+      Remove money from the account.
+      
+      Args:
+          amount: Amount to withdraw
+      
+      Returns:
+          The new account balance after withdrawal
+      
+      Raises:
+          ValueError: If withdrawal amount exceeds available balance
+      """
+      if amount > self.balance:
+          raise ValueError("Insufficient funds")
+      self.balance -= amount
+      return self.balance
+  
+  def collect_interest(self, interest_rate: float):
+      """
+      Calculate and add interest to the account.
+      
+      Args:
+          interest_rate: Interest rate as a decimal (e.g., 0.05 for 5%)
+      
+      Returns:
+          The new account balance after interest is applied
+      """
+      interest = self.balance * interest_rate
+      self.balance += interest
+      return self.balance
+

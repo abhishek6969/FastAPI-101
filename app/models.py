@@ -135,9 +135,9 @@ class Users(Base):
     
     # PHONE_NUMBER: Optional user phone number
     # Column(String, nullable=True): allows NULL values (phone is optional)
-    # server_default=text("NA"): if not provided, defaults to "NA" (Not Available)
+    # server_default=text("'NA'"): if not provided, defaults to "NA" (Not Available)
     # Useful for future two-factor authentication or contact features
-    phone_number = Column(String, nullable=True, server_default=text("NA"))
+    phone_number = Column(String, nullable=True, server_default=text("'NA'"))
     
 
 class Votes(Base):
